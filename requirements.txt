@@ -1,0 +1,37 @@
+# Dynamic FAQ Builder - Project Dependencies
+# This file lists the primary dependencies for both backend and frontend.
+# NOTE: Use 'npm install' in the respective folders to install them.
+
+# --- Backend (Node.js) ---
+express           # Web framework
+pg                # PostgreSQL client
+cors              # Cross-Origin Resource Sharing
+bcryptjs          # Password hashing
+jsonwebtoken      # Authentication (JWT)
+dotenv            # Environment variables
+cookie-parser     # Parse HTTP cookies
+
+# --- Backend Dev Dependencies ---
+jest              # Testing framework
+supertest         # HTTP assertions for testing
+eslint            # Linting tool
+eslint-plugin-jest # Jest linting rules
+nodemon           # Auto-restart server (optional dev tool)
+
+# --- Frontend (React + Vite) ---
+react             # UI Library
+react-dom         # React DOM bindings
+react-router-dom  # Routing
+axios             # HTTP client
+
+# --- Frontend Dev Dependencies ---
+vite              # Build tool
+vitest            # Testing framework (Jest compatible)
+jsdom             # Browser environment for testing
+@testing-library/react      # React testing utilities
+@testing-library/jest-dom   # Custom DOM element matchers
+@vitest/coverage-v8         # Code coverage tool
+eslint            # Linting tool
+eslint-plugin-react         # React linting rules
+eslint-plugin-react-hooks   # Hooks linting rules
+eslint-plugin-vitest        # Vitest linting rules

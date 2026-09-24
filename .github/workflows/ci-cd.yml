@@ -1,0 +1,156 @@
+name: CI-CD Pipeline (Node.js & React)
+#gel
+on:
+  push:
+    branches: [ "main", "develop", "feature/**", "fix-bug" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+
+jobs:
+  #----------------------------------------------------
+  # JOB 1: Test Backend
+  #----------------------------------------------------
+  backend-ci:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ${{ secrets.PG_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.PG_DATABASE }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: (Stage 1) Install Dependencies
+        run: npm ci
+
+      - name: Install PostgreSQL client
+        working-directory: ./
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      
+      - name: Apply Database Schema
+        env:
+          PGPASSWORD: ${{ secrets.PG_PASSWORD }}
+        working-directory: ./
+        run: psql -h localhost -U postgres -d ${{ secrets.PG_DATABASE }} -a -f Database.sql
+
+      - name: (Stage 4) Run Linting
+        run: npm run lint
+
+      - name: (Stage 5) Run Security Scan
+        run: npm audit --audit-level=high
+
+      - name: (Stage 2) Run Tests
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          DATABASE_URL: postgresql://postgres:${{ secrets.PG_PASSWORD }}@localhost:5432/${{ secrets.PG_DATABASE }}
+        run: npm test
+
+      - name: (Stage 3) Run Coverage
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          DATABASE_URL: postgresql://postgres:${{ secrets.PG_PASSWORD }}@localhost:5432/${{ secrets.PG_DATABASE }}
+        run: npm run coverage
+      
+      - name: (Artifact) Upload Backend Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage-report
+          path: backend/coverage/
+
+  #----------------------------------------------------
+  # JOB 2: Test & Build Frontend
+  #----------------------------------------------------
+  frontend-ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install Dependencies
+        run: npm ci
+      - name: (Stage 4) Run Linting
+        run: npm run lint
+      - name: (Stage 5) Run Security Scan
+        run: npm audit --audit-level=high
+      - name: (Stage 2) Run Tests
+        run: npm test
+      - name: (Stage 3) Run Coverage
+        run: npm run coverage
+      - name: (Stage 1) Run Build
+        run: npm run build
+      - name: (Artifact) Upload Frontend Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage-report
+          path: frontend/coverage/
+      - name: (Artifact) Upload Frontend Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/dist/
+
+  #----------------------------------------------------
+  # JOB 3: Create Deployment Artifact
+  #----------------------------------------------------
+  create-artifact:
+    runs-on: ubuntu-latest
+    needs: [backend-ci, frontend-ci]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/final-submission'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+      - name: Create Deployment Package
+        run: |
+          mkdir -p deployment-package/source-code
+          mkdir -p deployment-package/reports
+          cp -r backend deployment-package/source-code/
+          cp -r frontend/src deployment-package/source-code/frontend
+          cp README.md deployment-package/
+          cp backend/package.json deployment-package/source-code/backend/
+          cp frontend/package.json deployment-package/source-code/frontend/
+          mv artifacts/backend-coverage-report deployment-package/reports/
+          mv artifacts/frontend-coverage-report deployment-package/reports/
+          mv artifacts/frontend-build deployment-package/frontend-build
+      - name: Zip Deployment Artifact
+        run: zip -r deployment-package.zip deployment-package
+      - name: Upload Final Deployment Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-package
+          path: deployment-package.zip
